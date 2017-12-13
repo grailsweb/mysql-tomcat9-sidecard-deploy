@@ -1,0 +1,72 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: tomcat9
+  labels:
+    k8s-app: tomcat9
+    tier: web
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        k8s-app: tomcat9
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+      - image: sfgroups/sample:1.4
+        name: war
+        command: ["sh","-c","tail -f /dev/null"]
+        lifecycle:
+          postStart:
+            exec:
+              command:
+                - "sh"
+                - "-c"
+                - >
+                  if [ -f /sample.war ]; then
+                    cp -f /sample.war /app/sample.war;
+                  fi;      
+                  if [ -f /mysql-connector-java-5.1.45-bin.jar ]; then
+                    cp -f /mysql-connector-java-5.1.45-bin.jar /app/;
+                  fi
+        volumeMounts:
+        - mountPath: /app
+          name: app-volume
+      - name: tomcat9
+        image: tomcat:9.0.2-jre8-alpine
+        lifecycle:
+          postStart:
+            exec:
+              command:
+                - "sh"
+                - "-c"
+                - >
+                  if [ -f /usr/local/tomcat/webapps/mysql-connector-java-5.1.45-bin.jar ]; then
+                    cp -f /usr/local/tomcat/webapps/mysql-connector-java-5.1.45-bin.jar /usr/local/tomcat/lib/;
+                  fi;
+                  if [ -f /etc/config/context.xml ]; then
+                    cp -f /etc/config/context.xml /usr/local/tomcat/conf/;
+                  fi
+        volumeMounts:
+        - name: app-volume
+          mountPath: /usr/local/tomcat/webapps          
+        - name: context-volume
+          mountPath: /etc/config
+        env:        
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        ports:
+        - containerPort: 8080
+      volumes:
+      - name: app-volume
+        emptyDir: {}
+      - name: context-volume
+        configMap:  
+          name: tomcat9-configmap
